@@ -3,7 +3,6 @@ package com.example.testit.service;
 import com.example.testit.adapter.mail.MailService;
 import com.example.testit.model.Book;
 import com.example.testit.model.Member;
-import com.example.testit.model.Status;
 import com.example.testit.repository.BookRepository;
 import com.example.testit.repository.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,7 +12,7 @@ import org.mockito.Mockito;
 
 import java.util.Optional;
 
-import static com.example.testit.model.Status.EMPRUNTE;
+import static com.example.testit.model.Status.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
@@ -45,6 +44,10 @@ class BookServiceTest {
         member.setReferent(referent);
     }
 
+
+    // ================================================================
+    // Fonction borrowBook
+    // ================================================================
     @Test
     @DisplayName("Emprunte le livre car Dispo")
     public void testEmpruntLivreDispo() {
@@ -58,7 +61,9 @@ class BookServiceTest {
         service.borrowBook(1L,10L);
 
         Mockito.verify(bookRepository).save(book);
+        Mockito.verify(mailService, never()).sendMail(eq(member), any(), any());
         assertEquals(EMPRUNTE,book.getStatus());
+
     }
 
     @Test
@@ -78,6 +83,7 @@ class BookServiceTest {
 
         //Then
         Mockito.verify(bookRepository,never()).save(any(Book.class));
+        Mockito.verify(mailService, never()).sendMail(eq(member), any(), any());
     }
 
     @Test
@@ -93,6 +99,7 @@ class BookServiceTest {
 
         //Then
         Mockito.verify(memberRepository,never()).save(any(Member.class));
+        Mockito.verify(mailService, never()).sendMail(eq(member), any(), any());
     }
 
     @Test
@@ -109,4 +116,55 @@ class BookServiceTest {
         //Then
         Mockito.verify(bookRepository,never()).save(any(Book.class));
     }
+
+    @Test
+    @DisplayName("Le membre a déjà un livre")
+    public void testMembreADejaUnLivre() {
+        //Given
+        Optional<Book> optionalBook = Optional.of(book);
+        Optional<Member> optionalMember = Optional.of(member);
+        when(bookRepository.findById(1L)).thenReturn(optionalBook);
+        when(memberRepository.findById(10L)).thenReturn(optionalMember);
+
+        Book book_emprunte = new Book("Book a emprunter", "John Doe");
+        book_emprunte.setId(2L);
+        when(bookRepository.findById(2L)).thenReturn(optionalBook);
+        service.borrowBook(2L,10L);
+
+        //when
+        assertThrows(IllegalStateException.class,()-> service.borrowBook(1L,10L));
+
+        //then
+        assertEquals(DISPONIBLE,book.getStatus());
+        Mockito.verify(bookRepository,never()).save(any(Book.class));
+        Mockito.verify(memberRepository,never()).save(any(Member.class));
+        Mockito.verify(mailService, never()).sendMail(eq(member), any(), any());
+        Mockito.verify(mailService, never()).sendMail(eq(member).getReferent(), any(), any());
+
+    }
+
+    // ================================================================
+    // Fonction returnBook
+    // ================================================================
+    @Test
+    @DisplayName("Rendre le livre si livre emprunter et bon emprunteur")
+    public void testRendreLivreEmprunteur() {
+        //given
+        Optional<Book> optionalBook = Optional.of(book);
+        Optional<Member> optionalMember = Optional.of(member);
+        when(bookRepository.findById(1L)).thenReturn(optionalBook);
+        when(memberRepository.findById(10L)).thenReturn(optionalMember);
+        service.borrowBook(1L,10L);
+
+        //when
+        service.returnBook(1L,10L);
+
+        //then
+        assertEquals(RENDU,book.getStatus());
+        Mockito.verify(bookRepository).save(book);
+        Mockito.verify(memberRepository).save(member);
+        Mockito.verify(mailService, never()).sendMail(any(), any(), any());
+    }
+
+
 }
